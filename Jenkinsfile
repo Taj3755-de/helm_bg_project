@@ -17,18 +17,11 @@ pipeline {
 
     stages {
 
-        /* ----------------------------------------------------------
-           CHECKOUT CODE
-        ---------------------------------------------------------- */
         stage('Checkout') {
-            steps {
-                checkout scm
-            }
+            steps { checkout scm }
         }
 
-        /* ----------------------------------------------------------
-           DOCKER BUILD & PUSH TO ECR
-        ---------------------------------------------------------- */
+        /* BUILD IMAGE */
         stage('Build & Push Image') {
             steps {
                 sh """
@@ -42,58 +35,27 @@ pipeline {
             }
         }
 
-        /* ----------------------------------------------------------
-           CLEANUP OLD HELM RELEASE (FIRST TIME ONLY)
-           This handles:
-           - old partial Helm install
-           - leftover helm secrets
-           - fixes “cannot be imported” errors
-        ---------------------------------------------------------- */
-        stage('Helm Cleanup') {
-            steps {
-                sshagent([SSH_CRED]) {
-                    sh """
-                    ssh ${K8S_MASTER} '
-                        helm uninstall ${HELM_RELEASE} -n ${NAMESPACE} || true
-                        kubectl delete secret -n ${NAMESPACE} -l owner=helm,name=${HELM_RELEASE} || true
-                    '
-                    """
-                }
-            }
-        }
-
-        /* ----------------------------------------------------------
-           DETECT CURRENT LIVE COLOR (BLUE/GREEN)
-        ---------------------------------------------------------- */
-        stage('Detect Active Color') {
+        /* DETECT CURRENT LIVE COLOR */
+        stage('Detect Live Color') {
             steps {
                 sshagent([SSH_CRED]) {
                     script {
-
                         def color = sh(
-                            script: """ssh ${K8S_MASTER} "kubectl get svc finacplus-service -n ${NAMESPACE} -o jsonpath='{.spec.selector.color}' 2>/dev/null || true" """,
+                            script: """ssh ${K8S_MASTER} "kubectl get svc finacplus-service -n default -o jsonpath='{.spec.selector.color}' || echo blue" """,
                             returnStdout: true
                         ).trim()
 
-                        if (!color || color == "") {
-                            echo "No active service found. Setting default activeColor = blue"
-                            env.CURRENT_COLOR = "blue"
-                        } else {
-                            env.CURRENT_COLOR = color
-                        }
-
+                        env.CURRENT_COLOR = color ?: "blue"
                         env.NEW_COLOR = (env.CURRENT_COLOR == "blue") ? "green" : "blue"
 
-                        echo "Current Live Color: ${env.CURRENT_COLOR}"
-                        echo "New Target Color: ${env.NEW_COLOR}"
+                        echo "Live color: ${env.CURRENT_COLOR}"
+                        echo "Target color: ${env.NEW_COLOR}"
                     }
                 }
             }
         }
 
-        /* ----------------------------------------------------------
-           COPY HELM CHART TO MASTER NODE
-        ---------------------------------------------------------- */
+        /* COPY HELM CHART */
         stage('Copy Helm Chart') {
             steps {
                 sshagent([SSH_CRED]) {
@@ -104,36 +66,48 @@ pipeline {
             }
         }
 
-        /* ----------------------------------------------------------
-           DEPLOY USING HELM BLUE-GREEN
-        ---------------------------------------------------------- */
-        stage("Helm Upgrade to New Color") {
+        /* DEPLOY TO INACTIVE COLOR ONLY */
+        stage('Deploy Inactive Color') {
             steps {
                 sshagent([SSH_CRED]) {
                     sh """
-                    ssh ${K8S_MASTER} '
+                    ssh ${K8S_MASTER} "
                         helm upgrade --install ${HELM_RELEASE} ${HELM_CHART_PATH} \
-                            --namespace ${NAMESPACE} \
-                            --create-namespace \
-                            --set image.tag=${BUILD_NUMBER} \
-                            --set liveColor=${NEW_COLOR} \
-                            --wait --timeout 120s --debug
-                    '
+                          --namespace default \
+                          --set image.tag=${BUILD_NUMBER} \
+                          --set liveColor=${CURRENT_COLOR} \
+                          --wait --timeout 90s --debug
+                    "
                     """
                 }
             }
         }
 
-        /* ----------------------------------------------------------
-           HEALTH CHECK
-        ---------------------------------------------------------- */
-        stage("Health Check") {
+        /* HEALTH CHECK NEW COLOR */
+        stage('Health Check New Color') {
             steps {
                 sshagent([SSH_CRED]) {
                     sh """
                     ssh ${K8S_MASTER} "
                         kubectl rollout status deployment/app-${NEW_COLOR} \
-                        -n ${NAMESPACE} --timeout=60s
+                          -n default --timeout=60s
+                    "
+                    """
+                }
+            }
+        }
+
+        /* SWITCH TRAFFIC */
+        stage('Switch Traffic') {
+            steps {
+                sshagent([SSH_CRED]) {
+                    sh """
+                    ssh ${K8S_MASTER} "
+                        helm upgrade --install ${HELM_RELEASE} ${HELM_CHART_PATH} \
+                          --namespace default \
+                          --set image.tag=${BUILD_NUMBER} \
+                          --set liveColor=${NEW_COLOR} \
+                          --wait --timeout 60s --debug
                     "
                     """
                 }
@@ -141,27 +115,12 @@ pipeline {
         }
     }
 
-    /* ----------------------------------------------------------
-       POST DEPLOYMENT HANDLING
-    ---------------------------------------------------------- */
     post {
         success {
-            echo "SUCCESS: Traffic switched to ${env.NEW_COLOR}!"
+            echo "SUCCESS! Traffic routed to ${env.NEW_COLOR}"
         }
-
         failure {
-            echo "DEPLOYMENT FAILED — Rolling back..."
-
-            sshagent([SSH_CRED]) {
-                sh """
-                ssh ${K8S_MASTER} '
-                    helm upgrade --install ${HELM_RELEASE} ${HELM_CHART_PATH} \
-                        --namespace ${NAMESPACE} \
-                        --set liveColor=${CURRENT_COLOR} \
-                        --wait --timeout=60s
-                '
-                """
-            }
+            echo "FAILED! Rolling back to ${env.CURRENT_COLOR}"
         }
     }
 }
