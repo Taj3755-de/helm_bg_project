@@ -1,17 +1,16 @@
 replicaCount: 2
 
 image:
-  repository: repo
+  repository: 157314643992.dkr.ecr.us-east-1.amazonaws.com/finacplus/app-01v
   tag: latest
 
 service:
   type: NodePort
-  port: 80      # service port inside cluster
-  nodePort: 30123  # external port on worker nodes
+  port: 80
+  nodePort: 30123
 
 liveColor: blue
 
 colors:
   - blue
   - green
-
