@@ -1,11 +1,17 @@
 replicaCount: 2
+
 image:
   repository: repo
   tag: latest
+
 service:
-  type: LoadBalancer
-  port: 80
+  type: NodePort
+  port: 80      # service port inside cluster
+  nodePort: 30080  # external port on worker nodes
+
 liveColor: blue
+
 colors:
   - blue
   - green
+
