@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: finacplus-service
+spec:
+  type: {{.Values.service.type}}
+  ports:
+  - port: {{.Values.service.port}}
+    targetPort: 3000
+  selector:
+    app: finacplus
+    color: {{.Values.liveColor}}

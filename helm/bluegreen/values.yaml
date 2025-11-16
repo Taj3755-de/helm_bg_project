@@ -1,0 +1,11 @@
+replicaCount: 2
+image:
+  repository: repo
+  tag: latest
+service:
+  type: LoadBalancer
+  port: 80
+liveColor: blue
+colors:
+  - blue
+  - green
