@@ -1,32 +1,29 @@
-{{- range $c := .Values.colors }}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: app-{{$c}}
+  name: app-{{ .Values.deployColor }}
   labels:
     app: finacplus
-    color: {{$c}}
+    color: {{ .Values.deployColor }}
 spec:
-  replicas: {{ $.Values.replicaCount }}
+  replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
       app: finacplus
-      color: {{$c}}
+      color: {{ .Values.deployColor }}
   template:
     metadata:
       labels:
         app: finacplus
-        color: {{$c}}
+        color: {{ .Values.deployColor }}
     spec:
       imagePullSecrets:
-        - name: ecr-secret     # <-- ADD HERE
+        - name: ecr-secret
       containers:
         - name: finacplus
-          image: "{{ $.Values.image.repository }}:{{ $.Values.image.tag }}"
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           env:
             - name: COLOR
-              value: "{{$c}}"
+              value: "{{ .Values.deployColor }}"
           ports:
             - containerPort: 3000
----
-{{- end }}
