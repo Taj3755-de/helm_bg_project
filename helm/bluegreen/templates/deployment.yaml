@@ -3,8 +3,11 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: app-{{$c}}
+  labels:
+    app: finacplus
+    color: {{$c}}
 spec:
-  replicas: {{$.Values.replicaCount}}
+  replicas: {{ $.Values.replicaCount }}
   selector:
     matchLabels:
       app: finacplus
@@ -15,13 +18,15 @@ spec:
         app: finacplus
         color: {{$c}}
     spec:
+      imagePullSecrets:
+        - name: ecr-secret     # <-- ADD HERE
       containers:
-      - name: finacplus
-        image: "{{$.Values.image.repository}}:{{$.Values.image.tag}}"
-        env:
-        - name: COLOR
-          value: "{{$c}}"
-        ports:
-        - containerPort: 3000
+        - name: finacplus
+          image: "{{ $.Values.image.repository }}:{{ $.Values.image.tag }}"
+          env:
+            - name: COLOR
+              value: "{{$c}}"
+          ports:
+            - containerPort: 3000
 ---
 {{- end }}
