@@ -2,15 +2,13 @@ replicaCount: 2
 
 image:
   repository: 157314643992.dkr.ecr.us-east-1.amazonaws.com/finacplus/app-01v
-  tag: latest
+  tag: latest     # Jenkins overrides this at runtime
 
 service:
   type: NodePort
   port: 80
   nodePort: 30123
 
-liveColor: blue
+liveColor: blue    # Jenkins switches this
 
-colors:
-  - blue
-  - green
+deployColor: blue  # Jenkins sets this to NEW_COLOR
