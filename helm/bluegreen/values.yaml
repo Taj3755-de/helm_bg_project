@@ -7,7 +7,7 @@ image:
 service:
   type: NodePort
   port: 80      # service port inside cluster
-  nodePort: 30080  # external port on worker nodes
+  nodePort: 30123  # external port on worker nodes
 
 liveColor: blue
 
