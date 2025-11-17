@@ -35,25 +35,32 @@ pipeline {
             }
         }
 
-        /* DETECT CURRENT LIVE COLOR */
-        stage('Detect Live Color') {
-            steps {
-                sshagent([SSH_CRED]) {
-                    script {
-                        def color = sh(
-                            script: """ssh ${K8S_MASTER} "kubectl get svc finacplus-service -n default -o jsonpath='{.spec.selector.color}' || echo blue" """,
-                            returnStdout: true
-                        ).trim()
+    stage('Detect Live Color') {
+    steps {
+        sshagent([SSH_CRED]) {
+            script {
+                def activeColor = sh(
+                    script: """
+                        ssh -o StrictHostKeyChecking=no ${K8S_USER}@${K8S_NODE} \\
+                        "kubectl get svc ${RELEASE_NAME} -n ${NAMESPACE} -o jsonpath='{.spec.selector.color}'"
+                    """,
+                    returnStdout: true
+                ).trim()
 
-                        env.CURRENT_COLOR = color ?: "blue"
-                        env.NEW_COLOR = (env.CURRENT_COLOR == "blue") ? "green" : "blue"
-
-                        echo "Live color: ${env.CURRENT_COLOR}"
-                        echo "Target color: ${env.NEW_COLOR}"
-                    }
+                if (activeColor == "blue") {
+                    env.TARGET = "green"
+                } else if (activeColor == "green") {
+                    env.TARGET = "blue"
+                } else {
+                    env.TARGET = "blue"
                 }
+
+                echo "Active color = ${activeColor}, Deploying TARGET = ${env.TARGET}"
             }
         }
+    }
+}
+
 
         /* COPY HELM CHART */
         stage('Copy Helm Chart') {
